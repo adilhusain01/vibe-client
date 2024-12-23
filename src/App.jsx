@@ -15,6 +15,7 @@ const MemoryChallenge = lazy(() => import("./pages/MemoryChallenge"));
 const QuizOptions = lazy(() => import("./pages/QuizOptions"));
 const BrokenLink = lazy(() => import("./pages/BrokenLink"));
 const ServerError = lazy(() => import("./pages/ServerError"));
+const FactCheckingGame = lazy(() => import("./pages/FactCheckingGame"));
 import LoadingSpinner from "./components/LoadingSpinner";
 
 const App = () => {
@@ -33,6 +34,7 @@ const App = () => {
               <Route path="/leaderboards/:id" element={<LeaderBoards />} />
               <Route path="/typing" element={<Typing />} />
               <Route path="/memoryChallenge" element={<MemoryChallenge />} />
+              <Route path="/fact-check" element={<FactCheckingGame />} />
               <Route path="/quiz-options" element={<QuizOptions />} />
             </Route>
             <Route path="/500" element={<ServerError />} />
