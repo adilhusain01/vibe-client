@@ -45,6 +45,8 @@ const PdfToQuiz = () => {
   const [quizQids, setQuizQids] = useState([]);
   const [quizCreated, setQuizCreated] = useState(false);
 
+  const CONTRACT_ADDRESS = import.meta.env.CONTRACT_ADDRESS;
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData({

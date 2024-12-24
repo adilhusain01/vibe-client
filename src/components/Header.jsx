@@ -1,16 +1,25 @@
 import { Link } from "react-router-dom";
-import { useContext } from "react";
+import { useContext, useEffect, useState } from 'react';
 import { WalletContext } from "../context/WalletContext";
 import { Wallet, Menu } from "lucide-react";
 import Logo from "../assets/logo.png";
 
 const Header = () => {
-  const { walletAddress, connectWallet } = useContext(WalletContext);
+  const { walletAddress, connectWallet, network, switchNetwork } = useContext(WalletContext);
+  const [isCorrectNetwork, setIsCorrectNetwork] = useState(false);
 
   const truncateAddress = (address) => {
     if (!address) return "";
     return `${address.slice(0, 4)}...${address.slice(-4)}`;
   };
+
+  useEffect(() => {
+    if (network === 'NeoX-Testnet') {
+      setIsCorrectNetwork(true); 
+    } else {
+      setIsCorrectNetwork(false);
+    }
+  }, [network]); 
 
   return (
     <nav className="px-4 md:px-24 h-20 md:h-24 flex items-center justify-between bg-white/5 backdrop-blur-lg border-b border-white/10">
@@ -30,7 +39,7 @@ const Header = () => {
         </h1>
       </Link>
 
-      <div className="flex items-center gap-4">
+      {/* <div className="flex items-center gap-4">
         <button
           onClick={connectWallet}
           className="flex items-center gap-2 px-3 md:px-6 py-1 md:py-3 bg-gradient-to-r from-red-500 to-pink-500 rounded-md md:rounded-xl text-white font-medium hover:opacity-90 transition-all duration-300 shadow-lg shadow-red-500/25"
@@ -38,7 +47,35 @@ const Header = () => {
           <Wallet size={20} />
           {walletAddress ? truncateAddress(walletAddress) : "Connect Wallet"}
         </button>
+      </div> */}
+
+<div>
+        {walletAddress ? (
+          
+          !isCorrectNetwork ? (
+            <button
+              onClick={switchNetwork}
+              className="flex items-center gap-2 px-3 md:px-6 py-1 md:py-3 bg-gradient-to-r from-red-500 to-pink-500 rounded-md md:rounded-xl text-white font-medium hover:opacity-90 transition-all duration-300 shadow-lg shadow-red-500/25"
+            >
+              Switch to NeoX Testnet
+            </button>
+          ) : (
+            
+            <button className="flex items-center gap-2 px-3 md:px-6 py-1 md:py-3 bg-gradient-to-r from-red-500 to-pink-500 rounded-md md:rounded-xl text-white font-medium hover:opacity-90 transition-all duration-300 shadow-lg shadow-red-500/25">
+              <Wallet size={20} />
+              Connected: {truncateAddress(walletAddress)}
+            </button>
+          )
+        ) : (
+          <button
+            onClick={connectWallet}
+            className="flex items-center gap-2 px-3 md:px-6 py-1 md:py-3 bg-gradient-to-r from-red-500 to-pink-500 rounded-md md:rounded-xl text-white font-medium hover:opacity-90 transition-all duration-300 shadow-lg shadow-red-500/25"
+          >
+            Connect Wallet
+          </button>
+        )}
       </div>
+
     </nav>
   );
 };
