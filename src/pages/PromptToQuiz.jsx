@@ -2,9 +2,9 @@ import { useState, useContext, useRef, useEffect } from "react";
 import { WalletContext } from "../context/WalletContext";
 import toast from "react-hot-toast";
 import axios from "../api/axios";
-import { ethers } from 'ethers';
+import { ethers } from "ethers";
 import { QRCodeSVG } from "qrcode.react";
-import ABI from '../utils/abi.json';
+import ABI from "../utils/abi.json";
 import {
   Dialog,
   DialogContent,
@@ -84,8 +84,15 @@ const PromptToQuiz = () => {
       return;
     }
 
-    const rewardPerScoreInWei = ethers.utils.parseUnits(rewardPerScore.toString(), 18);
-    const totalCost = rewardPerScoreInWei.mul(numParticipants).mul(questionCount).mul(ethers.BigNumber.from('110')).div(ethers.BigNumber.from('100'));
+    const rewardPerScoreInWei = ethers.utils.parseUnits(
+      rewardPerScore.toString(),
+      18
+    );
+    const totalCost = rewardPerScoreInWei
+      .mul(numParticipants)
+      .mul(questionCount)
+      .mul(ethers.BigNumber.from("110"))
+      .div(ethers.BigNumber.from("100"));
 
     try {
       // Submit data to the API first
@@ -96,7 +103,7 @@ const PromptToQuiz = () => {
         questionCount,
         rewardPerScore: rewardPerScoreInWei.toString(),
         creatorWallet: walletAddress,
-        totalCost: totalCost.toString()
+        totalCost: totalCost.toString(),
       };
 
       setLoading(true);
@@ -112,30 +119,35 @@ const PromptToQuiz = () => {
       );
 
       setQuizCreated(true);
-      
+
       // Set quiz ID from API response
       const quizId = response.data.quizId;
       setQuizId(quizId);
-      console.log(quizId)
+      console.log(quizId);
 
-      console.log(CONTRACT_ADDRESS)
+      console.log(CONTRACT_ADDRESS);
 
-      if (typeof window.ethereum !== 'undefined') {
+      if (typeof window.ethereum !== "undefined") {
         // Create a provider and signer
         const provider = new ethers.providers.Web3Provider(window.ethereum);
         const signer = provider.getSigner();
-  
+
         // Initialize the contract with ABI
         const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI.abi, signer);
-  
+
         // Convert totalCost to wei (smallest unit of Ether)
         const budget = ethers.BigNumber.from(totalCost.toString());
 
         const tx = await contract.createGame({ value: budget });
 
         const receipt = await tx.wait();
-        const gameId = receipt.events.find(event => event.event === "GameCreated").args.gameId; // store this id
+        const gameId = receipt.events.find(
+          (event) => event.event === "GameCreated"
+        ).args.gameId; // store this id
+
+        //pushing game ID to backend
         console.log("New Game ID:", gameId.toString());
+        await axios.put(`/api/quiz/update/${quizId}`, { gameId });
 
         toast.success("Quiz successfully created");
         loadAllQuizzes();
@@ -152,7 +164,7 @@ const PromptToQuiz = () => {
         setLoading(false);
         setOpen(true);
       } else {
-        toast.error('Metamask not found. Please install Metamask')
+        toast.error("Metamask not found. Please install Metamask");
       }
     } catch (error) {
       console.error(
@@ -206,10 +218,13 @@ const PromptToQuiz = () => {
   const handleStopQuiz = async () => {
     setStartDisabled(true);
     try {
-      await axios.put(`/api/quiz/update/${quizId}`, {
+      const response = await axios.put(`/api/quiz/update/${quizId}`, {
         isPublic: false,
         isFinished: true,
       });
+
+      console.log(response.data);
+
       setIsPublic(false);
       setCloseDisabled(false);
 
