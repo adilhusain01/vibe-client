@@ -2,6 +2,8 @@ import { useState, useContext, useRef, useEffect } from "react";
 import { WalletContext } from "../context/WalletContext";
 import toast from "react-hot-toast";
 import axios from "../api/axios";
+import { ethers } from 'ethers';
+import ABI from '../utils/abi.json';
 import { QRCodeSVG } from "qrcode.react";
 import {
   Dialog,
@@ -45,7 +47,7 @@ const PdfToQuiz = () => {
   const [quizQids, setQuizQids] = useState([]);
   const [quizCreated, setQuizCreated] = useState(false);
 
-  const CONTRACT_ADDRESS = import.meta.env.CONTRACT_ADDRESS;
+  const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS;
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -95,7 +97,8 @@ const PdfToQuiz = () => {
       return;
     }
 
-    const totalCost = rewardPerScore * numParticipants * questionCount * 1.1;
+    const rewardPerScoreInWei = ethers.utils.parseUnits(rewardPerScore.toString(), 18);
+    const totalCost = rewardPerScoreInWei.mul(numParticipants).mul(questionCount).mul(ethers.BigNumber.from('110')).div(ethers.BigNumber.from('100'));
 
     try {
       const dataToSubmit = new FormData();
@@ -121,6 +124,28 @@ const PdfToQuiz = () => {
       const quizId = response.data.quizId;
       setQuizId(quizId);
 
+      console.log(quizId)
+
+      console.log(CONTRACT_ADDRESS)
+
+      if (typeof window.ethereum !== 'undefined') {
+        // Create a provider and signer
+        const provider = new ethers.providers.Web3Provider(window.ethereum);
+        const signer = provider.getSigner();
+  
+        // Initialize the contract with ABI
+        const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI.abi, signer);
+  
+        // Convert totalCost to wei (smallest unit of Ether)
+        const budget = ethers.BigNumber.from(totalCost.toString());
+
+        const tx = await contract.createGame({ value: budget });
+
+        const receipt = await tx.wait();
+        const gameId = receipt.events.find(event => event.event === "GameCreated").args.gameId; // store this id
+        console.log("New Game ID:", gameId.toString());
+
+
       toast.success("Quiz successfully created.");
       loadAllQuizzes();
 
@@ -137,6 +162,9 @@ const PdfToQuiz = () => {
 
       setLoading(false);
       setOpen(true);
+    } else {
+      toast.error("MetaMask not Found. Please install MetaMask")
+    }
     } catch (error) {
       console.error(
         error.response?.data?.message ||
@@ -320,7 +348,7 @@ const PdfToQuiz = () => {
                     onChange={handleChange}
                     className="w-full px-4 py-2 md:py-3 bg-white/10 border border-white/20 rounded-lg md:rounded-xl text-white placeholder-red-200 focus:outline-none focus:ring-2 focus:ring-red-400"
                     placeholder="Reward per score"
-                    min="0.0001"
+                    min="0.001"
                     required
                   />
                 </div>
