@@ -14,10 +14,10 @@ const Home = () => {
         <div className="max-w-xl space-y-8">
           <div className="text-center md:text-left space-y-4">
             <h1 className="text-4xl md:text-6xl font-bold text-white">
-              Learn Through
+              Learn & Engage
               <br />
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-400 to-pink-400">
-                Interactive Games
+                Through Games
               </span>
             </h1>
           </div>

@@ -35,8 +35,6 @@ const PromptToQuiz = () => {
   const [startDisabled, setStartDisabled] = useState(false);
   const [closeDisabled, setCloseDisabled] = useState(true);
   const qrRef = useRef();
-  const [quizIds, setQuizIds] = useState([]);
-  const [quizQids, setQuizQids] = useState([]);
   const [quizCreated, setQuizCreated] = useState(false);
   const baseUrl = import.meta.env.VITE_CLIENT_URI;
 
@@ -150,7 +148,6 @@ const PromptToQuiz = () => {
         await axios.put(`/api/quiz/update/${quizId}`, { gameId });
 
         toast.success("Quiz successfully created");
-        loadAllQuizzes();
         // Reset form data after successful creation
         setFormData({
           creatorName: "",
@@ -218,34 +215,63 @@ const PromptToQuiz = () => {
   const handleStopQuiz = async () => {
     setStartDisabled(true);
     try {
+      // Update quiz status via API
       const response = await axios.put(`/api/quiz/update/${quizId}`, {
         isPublic: false,
         isFinished: true,
       });
-
+  
       console.log(response.data);
-
+  
+      // Extract data from API response
+      const { gameId, participants } = response.data;
+      let scores = response.data.scores;
+  
+      // Validate API response data
+      if (!gameId || !participants || !scores || participants.length !== scores.length) {
+        toast.error("Invalid data received from the server");
+        setStartDisabled(false);
+        return;
+      }
+  
       setIsPublic(false);
       setCloseDisabled(false);
-
-      toast.success("Quiz has ended");
-      setOpen(false);
-      setStartDisabled(false);
-      setIsPublic(false);
-      setCloseDisabled(true);
-      setQuizCreated(false);
+  
+      if (typeof window.ethereum !== 'undefined') {
+        try {
+          // Create a provider and signer
+          const provider = new ethers.providers.Web3Provider(window.ethereum);
+          const signer = provider.getSigner();
+  
+          // Initialize the contract
+          const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI.abi, signer);
+  
+          // Convert scores to rewards in Wei
+          scores =  scores.map(score => score/1000000000000000000)
+          const rewards = scores.map(score => ethers.utils.parseEther(score.toString()));
+  
+          // Call the smart contract's endGame function
+          const tx = await contract.endGame(gameId, participants, rewards);
+          await tx.wait(); // Wait for the transaction to be mined
+  
+          toast.success("Game has ended successfully");
+          setOpen(false);
+          setStartDisabled(false);
+          setIsPublic(false);
+          setCloseDisabled(true);
+          setQuizCreated(false);
+        } catch (error) {
+          console.error("Error ending the game:", error);
+          toast.error("An error occurred while ending the game");
+        }
+      } else {
+        toast.error("MetaMask not found. Please install MetaMask.");
+      }
     } catch (error) {
       toast.error("Failed to end the quiz");
-      console.log(error);
-    }
-  };
-
-  const loadAllQuizzes = async () => {
-    try {
-      toast.success("Quizzes loaded successfully");
-    } catch (error) {
-      toast.error("Failed to load quizzes");
       console.error(error);
+    } finally {
+      setStartDisabled(false);
     }
   };
 
