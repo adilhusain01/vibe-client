@@ -349,7 +349,7 @@ const PromptToQuiz = () => {
                     onChange={handleChange}
                     className="w-full px-4 py-2 md:py-3 bg-white/10 border border-white/20 rounded-lg md:rounded-xl text-white placeholder-red-200 focus:outline-none focus:ring-2 focus:ring-red-400"
                     placeholder="Reward per score"
-                    min="0.001"
+                    min="0.0001"
                     required
                   />
                 </div>
