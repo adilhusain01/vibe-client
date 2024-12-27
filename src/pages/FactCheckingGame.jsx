@@ -1,307 +1,529 @@
-import React, { useState, useEffect, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import {
-  Brain,
-  Loader2,
-  Sparkles,
-  Timer,
-  ThumbsUp,
-  ThumbsDown,
-  Trophy,
-  RefreshCcw,
-  BookOpen,
-} from "lucide-react";
-import axios from "../api/axios";
+import { useState, useContext, useRef, useEffect } from "react";
+import { WalletContext } from "../context/WalletContext";
 import toast from "react-hot-toast";
-import { Dialog, DialogContent } from "@mui/material";
+import axios from "../api/axios";
+import { ethers } from "ethers";
+import { QRCodeSVG } from "qrcode.react";
+import ABI from "../utils/abi.json";
+import {
+  Dialog,
+  DialogContent,
+  DialogActions,
+  Button,
+  IconButton,
+  TextField,
+  InputAdornment,
+  CircularProgress,
+} from "@mui/material";
+import {
+  Download,
+  Copy,
+  Brain,
+  Users,
+  Trophy,
+  BookOpen,
+  Sparkles,
+} from "lucide-react";
 
 const FactCheckingGame = () => {
-  const [facts, setFacts] = useState(null);
-  const [stage, setStage] = useState("nameInput");
-  const [timer, setTimer] = useState(0);
-  const [currentFactIndex, setCurrentFactIndex] = useState(0);
-  const [userAnswers, setUserAnswers] = useState([]);
-  const [score, setScore] = useState(0);
-  const [difficulty, setDifficulty] = useState("medium");
-  const [topic, setTopic] = useState("");
-  const [participantName, setParticipantName] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const { walletAddress } = useContext(WalletContext);
+  const [formData, setFormData] = useState({
+    creatorName: "",
+    topic: "",
+    numParticipants: "",
+    questionCount: "",
+    rewardPerScore: "",
+    difficulty: "medium",
+  });
+  const [gameId, setGameId] = useState(null);
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [isPublic, setIsPublic] = useState(false);
+  const [participants, setParticipants] = useState([]);
+  const [startDisabled, setStartDisabled] = useState(false);
+  const [closeDisabled, setCloseDisabled] = useState(true);
+  const qrRef = useRef();
+  const [gameCreated, setGameCreated] = useState(false);
+  const baseUrl = import.meta.env.VITE_CLIENT_URI;
+  const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS;
 
-  const fetchFacts = useCallback(async () => {
-    setIsLoading(true);
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData({
+      ...formData,
+      [name]: value,
+    });
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    if (!walletAddress) {
+      toast.error("Please connect your wallet");
+      return;
+    }
+
+    const {
+      creatorName,
+      topic,
+      numParticipants,
+      questionCount,
+      rewardPerScore,
+      difficulty,
+    } = formData;
+
+    if (
+      !creatorName ||
+      !topic ||
+      !numParticipants ||
+      !questionCount ||
+      !rewardPerScore ||
+      !difficulty
+    ) {
+      toast.error("All fields are required");
+      return;
+    }
+
+    if (questionCount > 30) {
+      toast.error("Question count cannot be more than 30");
+      return;
+    }
+
+    const rewardPerScoreInWei = ethers.utils.parseUnits(
+      rewardPerScore.toString(),
+      18
+    );
+    const totalCost = rewardPerScoreInWei
+      .mul(numParticipants)
+      .mul(questionCount)
+      .mul(ethers.BigNumber.from("110"))
+      .div(ethers.BigNumber.from("100"));
+
     try {
-      const response = await axios.post("/api/fact-check/challenge", {
-        difficulty,
+      const dataToSubmit = {
+        creatorName,
         topic,
+        numParticipants,
+        questionCount,
+        rewardPerScore: rewardPerScoreInWei.toString(),
+        creatorWallet: walletAddress,
+        totalCost: totalCost.toString(),
+        difficulty,
+      };
+
+      setLoading(true);
+
+      const response = await axios.post(
+        `/api/fact-check/create`,
+        dataToSubmit,
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      setGameCreated(true);
+      const gameId = response.data.gameId;
+      setGameId(gameId);
+
+      if (typeof window.ethereum !== "undefined") {
+        const provider = new ethers.providers.Web3Provider(window.ethereum);
+        const signer = provider.getSigner();
+        const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI.abi, signer);
+        const budget = ethers.BigNumber.from(totalCost.toString());
+        const tx = await contract.createGame({ value: budget });
+        const receipt = await tx.wait();
+        const chainGameId = receipt.events.find(
+          (event) => event.event === "GameCreated"
+        ).args.gameId;
+
+        await axios.put(`/api/fact-check/update/${gameId}`, { chainGameId });
+
+        toast.success("Fact checking game created successfully");
+        setFormData({
+          creatorName: "",
+          topic: "",
+          numParticipants: "",
+          questionCount: "",
+          rewardPerScore: "",
+          difficulty: "medium",
+        });
+
+        setLoading(false);
+        setOpen(true);
+      } else {
+        toast.error("Metamask not found. Please install Metamask");
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error(
+        error.response?.data?.message ||
+          "An error occurred while creating the game"
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleClose = () => {
+    setOpen(false);
+  };
+
+  const handleDownload = () => {
+    const svg = qrRef.current.querySelector("svg");
+    const svgData = new XMLSerializer().serializeToString(svg);
+    const svgBlob = new Blob([svgData], {
+      type: "image/svg+xml;charset=utf-8",
+    });
+    const svgUrl = URL.createObjectURL(svgBlob);
+    const downloadLink = document.createElement("a");
+    downloadLink.href = svgUrl;
+    downloadLink.download = `fact-check-${gameId}.svg`;
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    document.body.removeChild(downloadLink);
+  };
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(`${baseUrl}/fact-check/${gameId}`);
+    toast.success("Link copied to clipboard");
+  };
+
+  const handleStartGame = async () => {
+    try {
+      await axios.put(`/api/fact-check/update/${gameId}`, { isPublic: true });
+      setIsPublic(true);
+      toast.success("Game has started");
+    } catch (error) {
+      toast.error("Failed to start the game");
+      console.log(error);
+    }
+  };
+
+  const handleStopGame = async () => {
+    setStartDisabled(true);
+    try {
+      const response = await axios.put(`/api/fact-check/update/${gameId}`, {
+        isPublic: false,
+        isFinished: true,
       });
 
-      const factsData = response.data.facts;
-      setFacts(factsData);
-      setStage("game");
-      setTimer(30);
-      setUserAnswers([]);
-      setIsLoading(false);
+      const { chainGameId, participants, scores } = response.data;
+
+      if (
+        !chainGameId ||
+        !participants ||
+        !scores ||
+        participants.length !== scores.length
+      ) {
+        toast.error("Invalid data received from the server");
+        setStartDisabled(false);
+        return;
+      }
+
+      setIsPublic(false);
+      setCloseDisabled(false);
+
+      if (typeof window.ethereum !== "undefined") {
+        const provider = new ethers.providers.Web3Provider(window.ethereum);
+        const signer = provider.getSigner();
+        const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI.abi, signer);
+
+        const normalizedScores = scores.map(
+          (score) => score / 1000000000000000000
+        );
+        const rewards = normalizedScores.map((score) =>
+          ethers.utils.parseEther(score.toString())
+        );
+
+        const tx = await contract.endGame(chainGameId, participants, rewards);
+        await tx.wait();
+
+        toast.success("Game has ended successfully");
+        setOpen(false);
+        setStartDisabled(false);
+        setIsPublic(false);
+        setCloseDisabled(true);
+        setGameCreated(false);
+      } else {
+        toast.error("MetaMask not found. Please install MetaMask.");
+      }
     } catch (error) {
-      toast.error("Failed to generate facts");
-      setIsLoading(false);
+      toast.error("Failed to end the game");
+      console.error(error);
+    } finally {
+      setStartDisabled(false);
     }
-  }, [difficulty, topic]);
+  };
+
+  const fetchParticipants = async () => {
+    try {
+      const response = await axios.get(
+        `/api/fact-check/leaderboards/${gameId}`
+      );
+      setParticipants(response.data.participants || []);
+    } catch (error) {
+      console.error("Failed to fetch participants:", error);
+    }
+  };
 
   useEffect(() => {
-    if (stage === "game" && timer > 0) {
-      const countdown = setInterval(() => {
-        setTimer((prev) => {
-          if (prev <= 1) {
-            clearInterval(countdown);
-            handleTimeUp();
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-
-      return () => clearInterval(countdown);
+    if (gameCreated && gameId) {
+      fetchParticipants();
+      const interval = setInterval(fetchParticipants, 1000);
+      return () => clearInterval(interval);
     }
-  }, [stage, timer]);
-
-  const handleAnswer = (isTrue) => {
-    const newAnswers = [
-      ...userAnswers,
-      {
-        factIndex: currentFactIndex,
-        userAnswer: isTrue,
-        isCorrect: isTrue === facts.items[currentFactIndex].isTrue,
-      },
-    ];
-    setUserAnswers(newAnswers);
-
-    if (currentFactIndex < facts.items.length - 1) {
-      setCurrentFactIndex((prev) => prev + 1);
-      setTimer(30); // Reset timer for next fact
-    } else {
-      evaluateGame(newAnswers);
-    }
-  };
-
-  const handleTimeUp = () => {
-    if (currentFactIndex < facts.items.length - 1) {
-      setCurrentFactIndex((prev) => prev + 1);
-      setTimer(30);
-    } else {
-      evaluateGame(userAnswers);
-    }
-  };
-
-  const evaluateGame = (answers) => {
-    const correctAnswers = answers.filter((answer) => answer.isCorrect).length;
-    const calculatedScore = Math.round(
-      (correctAnswers / facts.items.length) * 100
-    );
-    setScore(calculatedScore);
-    setStage("result");
-  };
-
-  const handleNameSubmit = () => {
-    if (participantName.trim()) {
-      setStage("setup");
-    } else {
-      toast.error("Please enter your name");
-    }
-  };
-
-  const fullReset = () => {
-    setFacts(null);
-    setStage("nameInput");
-    setTimer(0);
-    setCurrentFactIndex(0);
-    setUserAnswers([]);
-    setScore(0);
-    setDifficulty("medium");
-    setTopic("");
-    setParticipantName("");
-    setIsLoading(false);
-  };
-
-  const renderContent = () => {
-    switch (stage) {
-      case "nameInput":
-        return renderNameInputStage();
-      case "setup":
-        return renderSetupStage();
-      case "game":
-        return facts && renderGameStage();
-      case "result":
-        return renderResultStage();
-      default:
-        return null;
-    }
-  };
-
-  const renderNameInputStage = () => (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      className="space-y-6"
-    >
-      <div className="text-center space-y-2">
-        <Brain className="w-16 h-16 text-red-300 mx-auto" />
-        <h1 className="text-2xl md:text-3xl font-bold text-white">
-          Fact Checking Challenge
-        </h1>
-        <p className="text-red-200">Test your knowledge!</p>
-      </div>
-
-      <input
-        type="text"
-        value={participantName}
-        onChange={(e) => setParticipantName(e.target.value)}
-        placeholder="Enter your name"
-        className="w-full px-4 py-2 md:py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-red-200 focus:outline-none focus:ring-2 focus:ring-red-400"
-      />
-
-      <button
-        onClick={handleNameSubmit}
-        className="w-full px-6 py-3 bg-gradient-to-r from-red-500 to-pink-500 rounded-xl text-white font-medium hover:opacity-90 transition-opacity"
-      >
-        Start Game
-      </button>
-    </motion.div>
-  );
-
-  const renderSetupStage = () => (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      className="space-y-6"
-    >
-      <div className="text-center space-y-2">
-        <Brain className="w-16 h-16 text-red-300 mx-auto" />
-        <h1 className="text-2xl md:text-3xl font-bold text-white">
-          Fact Checking Challenge
-        </h1>
-        <p className="text-red-200">Test your knowledge!</p>
-      </div>
-
-      <div className="space-y-4">
-        <label className="text-white block">Select Difficulty:</label>
-        <select
-          value={difficulty}
-          onChange={(e) => setDifficulty(e.target.value)}
-          className="w-full px-4 py-2 md:py-3 bg-white/10 border border-white/20 rounded-xl text-white appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-red-400"
-        >
-          <option value="easy" className="bg-red-900">
-            Easy
-          </option>
-          <option value="medium" className="bg-red-900">
-            Medium
-          </option>
-          <option value="hard" className="bg-red-900">
-            Hard
-          </option>
-        </select>
-
-        <input
-          type="text"
-          value={topic}
-          onChange={(e) => setTopic(e.target.value)}
-          placeholder="Enter a topic (e.g., 'Space', 'History')"
-          className="w-full px-4 py-2 md:py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-red-200 focus:outline-none focus:ring-2 focus:ring-red-400"
-        />
-      </div>
-
-      <button
-        onClick={fetchFacts}
-        disabled={isLoading || !topic.trim()}
-        className="w-full px-6 py-3 bg-gradient-to-r from-red-500 to-pink-500 rounded-xl text-white font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
-      >
-        {isLoading ? (
-          <div className="flex items-center justify-center gap-2">
-            <Loader2 className="animate-spin" size={20} />
-            Generating Facts...
-          </div>
-        ) : (
-          <div className="flex items-center justify-center gap-2">
-            <Sparkles size={20} />
-            Start Challenge
-          </div>
-        )}
-      </button>
-    </motion.div>
-  );
-
-  const renderGameStage = () => (
-    <div className="text-center space-y-4">
-      <h2 className="text-xl md:text-2xl font-bold text-white flex items-center justify-center gap-2">
-        <BookOpen size={24} /> Fact {currentFactIndex + 1} of{" "}
-        {facts.items.length}
-      </h2>
-
-      <motion.div
-        key={currentFactIndex}
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -20 }}
-        className="bg-white/10 p-6 rounded-xl text-white text-lg"
-      >
-        {facts.items[currentFactIndex].statement}
-      </motion.div>
-
-      <div className="flex justify-center gap-4">
-        <button
-          onClick={() => handleAnswer(true)}
-          className="flex items-center gap-2 px-6 py-3 bg-green-500/20 hover:bg-green-500/30 rounded-xl text-white"
-        >
-          <ThumbsUp size={20} /> True
-        </button>
-        <button
-          onClick={() => handleAnswer(false)}
-          className="flex items-center gap-2 px-6 py-3 bg-red-500/20 hover:bg-red-500/30 rounded-xl text-white"
-        >
-          <ThumbsDown size={20} /> False
-        </button>
-      </div>
-
-      <p className="text-red-200 flex items-center justify-center gap-2">
-        <Timer size={20} /> Time Remaining: {timer} seconds
-      </p>
-    </div>
-  );
-
-  const renderResultStage = () => (
-    <div className="text-center space-y-4">
-      <h2 className="text-2xl font-bold text-white">Challenge Complete</h2>
-      <div className="flex justify-center items-center space-x-4">
-        <Trophy className="w-16 h-16 text-yellow-400" />
-        <div>
-          <p className="text-xl text-white">Score: {score}%</p>
-          <p className="text-red-200">Topic: {topic}</p>
-          <p className="text-red-200">Difficulty: {difficulty.toUpperCase()}</p>
-        </div>
-      </div>
-      <button
-        onClick={fullReset}
-        className="flex items-center gap-2 mx-auto px-6 py-3 bg-gradient-to-r from-red-500 to-pink-500 rounded-xl text-white"
-      >
-        <RefreshCcw size={20} /> Play Again
-      </button>
-    </div>
-  );
+  }, [gameId, gameCreated]);
 
   return (
     <div
-      className="flex items-center justify-center px-4 py-10 md:py-16"
+      className="flex items-center justify-center"
       style={{ height: "calc(100vh - 6rem)" }}
     >
-      <AnimatePresence mode="wait">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -20 }}
-          className="w-full max-w-4xl bg-white/10 backdrop-blur-lg rounded-2xl p-8 border border-white/20 shadow-xl"
+      <div className="max-w-4xl mx-auto">
+        <div className="text-center space-y-4 mb-8">
+          <h1 className="text-2xl md:text-5xl font-bold text-white">
+            Create Fact Checking &nbsp;
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-400 to-pink-400">
+              Game
+            </span>
+          </h1>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-6 text-sm md:text-md">
+          <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 border border-white/20 shadow-xl">
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <label className="text-white text-sm font-medium">
+                  Creator Name
+                </label>
+                <input
+                  type="text"
+                  name="creatorName"
+                  value={formData.creatorName}
+                  onChange={handleChange}
+                  className="w-full px-4 py-2 md:py-3 bg-white/10 border border-white/20 rounded-lg md:rounded-xl text-white placeholder-red-200 focus:outline-none focus:ring-2 focus:ring-red-400"
+                  placeholder="Enter your name"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <label className="text-white text-sm font-medium flex items-center gap-2">
+                    <Users size={16} />
+                    Participants
+                  </label>
+                  <input
+                    type="number"
+                    name="numParticipants"
+                    value={formData.numParticipants}
+                    onChange={handleChange}
+                    className="w-full px-4 py-2 md:py-3 bg-white/10 border border-white/20 rounded-lg md:rounded-xl text-white placeholder-red-200 focus:outline-none focus:ring-2 focus:ring-red-400"
+                    placeholder="Number of participants"
+                    min="1"
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-white text-sm font-medium flex items-center gap-2">
+                    <BookOpen size={16} />
+                    Facts
+                  </label>
+                  <input
+                    type="number"
+                    name="questionCount"
+                    value={formData.questionCount}
+                    onChange={handleChange}
+                    className="w-full px-4 py-2 md:py-3 bg-white/10 border border-white/20 rounded-lg md:rounded-xl text-white placeholder-red-200 focus:outline-none focus:ring-2 focus:ring-red-400"
+                    placeholder="Number of facts"
+                    min="1"
+                    max="30"
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-white text-sm font-medium flex items-center gap-2">
+                    <Trophy size={16} />
+                    Reward
+                  </label>
+                  <input
+                    type="number"
+                    name="rewardPerScore"
+                    value={formData.rewardPerScore}
+                    onChange={handleChange}
+                    className="w-full px-4 py-2 md:py-3 bg-white/10 border border-white/20 rounded-lg md:rounded-xl text-white placeholder-red-200 focus:outline-none focus:ring-2 focus:ring-red-400"
+                    placeholder="Reward per score"
+                    min="0.0001"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-white text-sm font-medium flex items-center gap-2">
+                    <Brain size={16} />
+                    Topic
+                  </label>
+                  <input
+                    type="text"
+                    name="topic"
+                    value={formData.topic}
+                    onChange={handleChange}
+                    className="w-full px-4 py-2 md:py-3 bg-white/10 border border-white/20 rounded-lg md:rounded-xl text-white placeholder-red-200 focus:outline-none focus:ring-2 focus:ring-red-400"
+                    placeholder="Enter topic (e.g., 'Space', 'History')"
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-white text-sm font-medium">
+                    Difficulty
+                  </label>
+                  <select
+                    name="difficulty"
+                    value={formData.difficulty}
+                    onChange={handleChange}
+                    className="w-full px-4 py-2 md:py-3 bg-white/10 border border-white/20 rounded-lg md:rounded-xl text-white appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-red-400"
+                  >
+                    <option value="easy" className="bg-red-900">
+                      Easy
+                    </option>
+                    <option value="medium" className="bg-red-900">
+                      Medium
+                    </option>
+                    <option value="hard" className="bg-red-900">
+                      Hard
+                    </option>
+                  </select>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full px-6 py-3 md:py-4 bg-gradient-to-r from-red-500 to-pink-500 rounded-lg md:rounded-xl text-white font-medium hover:opacity-90 transition-opacity flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {loading ? (
+                  <CircularProgress size={24} color="inherit" />
+                ) : (
+                  <>
+                    <Sparkles size={20} />
+                    Create Game
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </form>
+
+        <Dialog
+          open={open}
+          onClose={(_, reason) =>
+            reason === "backdropClick" ? null : handleClose
+          }
+          maxWidth="md"
+          fullWidth
+          PaperProps={{
+            style: {
+              backgroundColor: "#7f1d1d",
+              borderRadius: "1rem",
+              border: "1px solid rgba(255, 255, 255, 0.1)",
+            },
+          }}
         >
-          {renderContent()}
-        </motion.div>
-      </AnimatePresence>
+          <DialogContent>
+            <div className="grid md:grid-cols-2 gap-8">
+              {/* QR Code Section */}
+              <div className="flex flex-col items-center gap-6" ref={qrRef}>
+                <h2 className="text-xl md:text-2xl font-bold text-white">
+                  Game ID: <span className="text-red-400">{gameId}</span>
+                </h2>
+                <div className="bg-white p-4 rounded-xl">
+                  <QRCodeSVG
+                    value={`${baseUrl}/fact-check/${gameId}`}
+                    className="w-48 h-48 sm:w-48 sm:h-48 md:w-64 md:h-64 lg:w-72 lg:h-72"
+                  />
+                </div>
+                <TextField
+                  value={`${baseUrl}/fact-check/${gameId}`}
+                  InputProps={{
+                    readOnly: true,
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton onClick={handleCopy}>
+                          <Copy className="text-red-400" size={20} />
+                        </IconButton>
+                      </InputAdornment>
+                    ),
+                  }}
+                  fullWidth
+                  sx={{
+                    "& .MuiInputBase-root": {
+                      color: "white",
+                      backgroundColor: "rgba(255, 255, 255, 0.1)",
+                    },
+                  }}
+                />
+              </div>
+
+              {/* Participants Section */}
+              <div className="space-y-4">
+                <h2 className="text-xl md:text-2xl font-bold text-white text-center">
+                  Participants
+                </h2>
+                <div className="bg-white/10 rounded-xl p-4 max-h-[300px] overflow-y-auto">
+                  {participants.map((participant) => (
+                    <div
+                      key={participant.walletAddress}
+                      className="flex justify-between items-center py-2 px-4 border-b border-white/10 text-white"
+                    >
+                      <span>{participant.participantName}</span>
+                      <span className="font-mono">
+                        {participant.score !== null ? participant.score : "N/A"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </DialogContent>
+
+          <DialogActions className="p-4 bg-white/5">
+            <IconButton onClick={handleDownload} className="text-red-400">
+              <Download size={20} style={{ color: "white" }} />
+            </IconButton>
+            <Button
+              onClick={handleClose}
+              disabled={closeDisabled}
+              color="inherit"
+              className="text-white"
+            >
+              Close
+            </Button>
+            <Button
+              onClick={handleStartGame}
+              disabled={isPublic || loading || startDisabled}
+              color="inherit"
+              className="bg-gradient-to-r from-red-500 to-pink-500 text-white px-4 py-2 rounded-lg"
+            >
+              Start Game
+            </Button>
+            <Button
+              onClick={handleStopGame}
+              disabled={!isPublic || loading}
+              color="inherit"
+              className="bg-gradient-to-r from-red-500 to-pink-500 text-white px-4 py-2 rounded-lg"
+            >
+              Stop Game
+            </Button>
+          </DialogActions>
+        </Dialog>
+      </div>
     </div>
   );
 };

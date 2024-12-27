@@ -12,29 +12,33 @@ import {
   RefreshCcw,
   Trophy,
   Loader2,
+  ThumbsUp,
+  ThumbsDown,
 } from "lucide-react";
 
-const Quiz = () => {
+const FactCheckingGame = () => {
   const { id } = useParams();
   const { walletAddress, connectWallet } = useContext(WalletContext);
+  const navigate = useNavigate();
+
+  // State management
   const [loading, setLoading] = useState(true);
-  const [quiz, setQuiz] = useState(null);
-  const [quizCreator, setQuizCreator] = useState("");
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [game, setGame] = useState(null);
+  const [gameCreator, setGameCreator] = useState("");
+  const [currentFactIndex, setCurrentFactIndex] = useState(0);
   const [answers, setAnswers] = useState({});
   const [participantName, setParticipantName] = useState("");
   const [nameDialogOpen, setNameDialogOpen] = useState(true);
   const [timer, setTimer] = useState(30);
   const [userJoined, setUserJoined] = useState(false);
-  const [quizStarted, setQuizStarted] = useState(false);
-  const [quizEnded, setQuizEnded] = useState(false);
+  const [gameStarted, setGameStarted] = useState(false);
+  const [gameEnded, setGameEnded] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const navigate = useNavigate();
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
   useEffect(() => {
-    const fetchQuiz = async () => {
+    const fetchGame = async () => {
       if (!walletAddress) {
         toast.error("Please connect your wallet first.");
         await connectWallet();
@@ -43,7 +47,7 @@ const Quiz = () => {
 
       try {
         const response = await axios.post(
-          `/api/quiz/verify/${id}`,
+          `/api/fact-check/verify/${id}`,
           { walletAddress },
           {
             headers: {
@@ -52,76 +56,73 @@ const Quiz = () => {
           }
         );
 
-        setQuiz(response.data);
-        setQuizStarted(response.data.isPublic);
-        setQuizEnded(response.data.isFinished);
-        setQuizCreator(response.data.creatorName);
+        setGame(response.data);
+        setGameStarted(response.data.isPublic);
+        setGameEnded(response.data.isFinished);
+        setGameCreator(response.data.creatorName);
         setLoading(false);
       } catch (err) {
         setError(err.response?.data?.error);
-        console.log(err);
-
-        if (err.response?.status === 404) setMessage("Quiz not found");
+        setMessage(err.response?.status === 404 ? "Game not found" : "");
         setLoading(false);
-
         toast.error(
           err.response?.data?.error ||
-            "An error occurred while fetching the quiz."
+            "An error occurred while fetching the game."
         );
       }
     };
 
-    fetchQuiz();
-    loadAllQuizzes(); // Ensure loadAllQuizzes is awaited
+    fetchGame();
   }, [id, walletAddress, connectWallet]);
 
+  // Timer effect
   useEffect(() => {
     let interval;
-    if (quizStarted && !isSubmitting && !quizEnded && userJoined) {
+    if (gameStarted && !isSubmitting && !gameEnded && userJoined) {
       interval = setInterval(() => {
         setTimer((prevTimer) => {
           if (prevTimer <= 1) {
-            handleNextQuestion();
+            handleNextFact();
             return 30;
           }
           return prevTimer - 1;
         });
       }, 1000);
     }
-
     return () => clearInterval(interval);
-  }, [quizStarted, currentQuestionIndex, isSubmitting, quizEnded, userJoined]);
+  }, [gameStarted, currentFactIndex, isSubmitting, gameEnded, userJoined]);
 
-  const handleAnswerChange = (questionId, answer) => {
-    if (isSubmitting || !userJoined) return; // Prevent answer changes during submission
+  const handleAnswerChange = (factId, answer) => {
+    if (isSubmitting || !userJoined) return;
     setAnswers({
       ...answers,
-      [questionId]: answer,
+      [factId]: answer,
     });
   };
 
-  const handleNextQuestion = () => {
+  const handleNextFact = () => {
     if (isSubmitting || !userJoined) return;
 
-    const currentQuestion = quiz.questions[currentQuestionIndex];
-    if (!answers[currentQuestion._id]) {
+    const currentFact = game.facts[currentFactIndex];
+    if (!answers[currentFact._id]) {
       setAnswers({
         ...answers,
-        [currentQuestion._id]: "no_answer",
+        [currentFact._id]: "skipped",
       });
     }
     setTimer(30);
-    if (currentQuestionIndex < quiz.questions.length - 1) {
-      setCurrentQuestionIndex(currentQuestionIndex + 1);
+
+    if (currentFactIndex < game.facts.length - 1) {
+      setCurrentFactIndex(currentFactIndex + 1);
     } else {
-      handleSubmitQuiz();
+      handleSubmitGame();
     }
   };
 
-  const handleJoinQuiz = async () => {
+  const handleJoinGame = async () => {
     try {
       await axios.post(
-        `/api/quiz/join/${id}`,
+        `/api/fact-check/join/${id}`,
         {
           walletAddress,
           participantName,
@@ -132,27 +133,25 @@ const Quiz = () => {
           },
         }
       );
-      toast.success("Joined quiz successfully!");
-      await loadAllQuizzes();
+      toast.success("Joined fact-checking game successfully!");
       setNameDialogOpen(false);
       setUserJoined(true);
       setTimer(30);
-      setQuizStarted(true); // Start the quiz and timer
+      setGameStarted(true);
     } catch (err) {
       toast.error(
-        err.response?.data?.error || "An error occurred while joining the quiz."
+        err.response?.data?.error || "An error occurred while joining the game."
       );
     }
   };
 
-  const handleSubmitQuiz = async () => {
+  const handleSubmitGame = async () => {
     setIsSubmitting(true);
     try {
-      // 1. First, submit quiz answers to API
-      const quizSubmissionResponse = await axios.post(
-        "/api/quiz/submit",
+      await axios.post(
+        "/api/fact-check/submit",
         {
-          quizId: id,
+          gameId: id,
           walletAddress,
           answers,
         },
@@ -163,27 +162,16 @@ const Quiz = () => {
         }
       );
 
-      toast.success("Quiz score submitted successfully!");
-
-      // 8. Navigate to leaderboards
+      toast.success("Answers submitted successfully!");
       navigate(`/leaderboards/${id}`);
     } catch (err) {
       console.error(err);
       toast.error(
         err.response?.data?.error ||
-          "An error occurred while submitting the quiz."
+          "An error occurred while submitting answers."
       );
     } finally {
       setIsSubmitting(false);
-    }
-  };
-
-  const loadAllQuizzes = async () => {
-    try {
-      toast.success("Quizzes loaded successfully");
-    } catch (error) {
-      console.error(error);
-      toast.error("Failed to load quizzes");
     }
   };
 
@@ -192,30 +180,24 @@ const Quiz = () => {
       toast.error("Please enter your name.");
       return;
     }
-    handleJoinQuiz();
+    handleJoinGame();
   };
 
   if (loading) {
     return (
-      <div
-        className="flex items-center justify-center"
-        style={{ height: "calc(100vh - 6rem)" }}
-      >
+      <div className="flex items-center justify-center h-[calc(100vh-6rem)]">
         <Loader2 className="w-6 md:w-8 h-6 md:h-8 text-red-400 animate-spin" />
       </div>
     );
   }
 
-  if (quizEnded) {
+  if (gameEnded) {
     return (
-      <div
-        className="flex items-center justify-center"
-        style={{ height: "calc(100vh - 6rem)" }}
-      >
+      <div className="flex items-center justify-center h-[calc(100vh-6rem)]">
         <div className="text-center space-y-4">
           <Trophy className="w-12 md:w-16 h-12 md:h-16 text-red-400 mx-auto" />
           <h1 className="text-2xl md:text-4xl font-bold text-white">
-            Quiz has ended
+            Game has ended
           </h1>
           <p className="text-red-200">
             Check the leaderboard to see the results
@@ -225,18 +207,15 @@ const Quiz = () => {
     );
   }
 
-  if (!quizStarted) {
+  if (!gameStarted) {
     return (
-      <div
-        className="flex items-center justify-center"
-        style={{ height: "calc(100vh - 6rem)" }}
-      >
+      <div className="flex items-center justify-center h-[calc(100vh-6rem)]">
         <div className="text-center flex flex-col items-center justify-center space-y-6">
           <h1 className="text-2xl md:text-4xl font-bold text-white">
-            {message.length > 0 ? message : "Quiz hasn't started yet"}
+            {message || "Game hasn't started yet"}
           </h1>
           <p className="text-md md:text-lg text-red-200">
-            {message.length > 0 ? "" : "Please wait for the quiz to begin"}
+            {message ? "" : "Please wait for the game to begin"}
           </p>
           <button
             onClick={() => window.location.reload()}
@@ -250,14 +229,10 @@ const Quiz = () => {
     );
   }
 
-  const currentQuestion = quiz.questions[currentQuestionIndex];
+  const currentFact = game?.facts[currentFactIndex];
 
   return (
-    <div
-      className="flex items-center justify-center px-4"
-      style={{ height: "calc(100vh - 6rem)" }}
-    >
-      {/* Name Dialog remains the same */}
+    <div className="flex items-center justify-center px-4 h-[calc(100vh-6rem)]">
       <Dialog
         open={nameDialogOpen}
         PaperProps={{
@@ -270,12 +245,9 @@ const Quiz = () => {
           },
         }}
       >
-        <DialogContent
-          className="space-y-4"
-          style={{ backgroundColor: "#7f1d1d" }}
-        >
+        <DialogContent className="space-y-4">
           <h2 className="text-xl md:text-2xl font-bold text-white text-center">
-            Welcome to the Quiz
+            Welcome to the Fact Checking Game
           </h2>
           <p className="text-md md:text-lg text-red-200 text-center">
             Please enter your name to begin
@@ -291,29 +263,26 @@ const Quiz = () => {
             onClick={handleNameSubmit}
             className="w-full px-6 py-2 md:py-3 bg-gradient-to-r from-red-500 to-pink-500 rounded-xl text-white font-medium hover:opacity-90 transition-opacity"
           >
-            Start Quiz
+            Start Game
           </button>
         </DialogContent>
       </Dialog>
 
-      {/* Main Quiz Container */}
-      {userJoined ? (
+      {userJoined && (
         <div className="w-full max-w-4xl">
           <AnimatePresence mode="wait">
             <motion.div
-              key={currentQuestionIndex}
+              key={currentFactIndex}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
               className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 border border-white/20 shadow-xl space-y-6"
             >
-              {/* Timer and Progress - Only show if not submitting */}
               {!isSubmitting && (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-red-200">
-                      Question {currentQuestionIndex + 1} of{" "}
-                      {quiz?.questions?.length}
+                      Fact {currentFactIndex + 1} of {game?.facts?.length}
                     </span>
                     <div className="flex items-center gap-2 text-white">
                       <Timer size={20} className="text-red-400" />
@@ -331,12 +300,11 @@ const Quiz = () => {
                 </div>
               )}
 
-              {/* Show loading state during submission */}
               {isSubmitting ? (
                 <div className="flex flex-col items-center justify-center py-8 space-y-4">
                   <Loader2 className="w-12 h-12 text-red-400 animate-spin" />
                   <p className="text-white text-xl font-medium">
-                    Submitting Quiz...
+                    Submitting Answers...
                   </p>
                   <p className="text-red-200 text-center">
                     Please wait while we process your submission
@@ -344,56 +312,62 @@ const Quiz = () => {
                 </div>
               ) : (
                 <>
-                  {/* Question */}
-                  <h2 className="text-lg md:text-2xl font-bold text-white">
-                    {currentQuestion.question}
-                  </h2>
-
-                  {/* Options Grid */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {Object.entries(currentQuestion.options).map(
-                      ([key, value]) => (
-                        <motion.button
-                          key={key}
-                          onClick={() =>
-                            handleAnswerChange(currentQuestion._id, key)
-                          }
-                          className={`relative p-3 md:p-6 text-md md:text-lg text-left rounded-lg md:rounded-xl border transition-all ${
-                            answers[currentQuestion._id] === key
-                              ? "bg-red-500/20 border-red-400"
-                              : "bg-white/5 border-white/10 hover:bg-white/10"
-                          }`}
-                          whileHover={{ scale: 1.02 }}
-                          whileTap={{ scale: 0.98 }}
-                        >
-                          <span className="text-white font-medium">
-                            {value}
-                          </span>
-                          {answers[currentQuestion._id] === key && (
-                            <CheckCircle2
-                              className="absolute top-4 right-4 text-red-400"
-                              size={24}
-                            />
-                          )}
-                        </motion.button>
-                      )
-                    )}
+                  <div className="space-y-4">
+                    <h2 className="text-lg md:text-2xl font-bold text-white">
+                      {currentFact.statement}
+                    </h2>
+                    <p className="text-red-200">
+                      Is this statement true or false?
+                    </p>
                   </div>
 
-                  {/* Navigation */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <motion.button
+                      onClick={() =>
+                        handleAnswerChange(currentFact._id, "true")
+                      }
+                      className={`flex items-center justify-center gap-2 p-4 rounded-xl border transition-all ${
+                        answers[currentFact._id] === "true"
+                          ? "bg-red-500/20 border-red-400"
+                          : "bg-white/5 border-white/10 hover:bg-white/10"
+                      }`}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                    >
+                      <ThumbsUp size={24} className="text-green-400" />
+                      <span className="text-white font-medium">True</span>
+                    </motion.button>
+
+                    <motion.button
+                      onClick={() =>
+                        handleAnswerChange(currentFact._id, "false")
+                      }
+                      className={`flex items-center justify-center gap-2 p-4 rounded-xl border transition-all ${
+                        answers[currentFact._id] === "false"
+                          ? "bg-red-500/20 border-red-400"
+                          : "bg-white/5 border-white/10 hover:bg-white/10"
+                      }`}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                    >
+                      <ThumbsDown size={24} className="text-red-400" />
+                      <span className="text-white font-medium">False</span>
+                    </motion.button>
+                  </div>
+
                   <div className="flex justify-end">
                     <button
-                      onClick={handleNextQuestion}
-                      disabled={!answers[currentQuestion._id]}
+                      onClick={handleNextFact}
+                      disabled={!answers[currentFact._id]}
                       className={`flex items-center gap-2 px-4 md:px-6 py-2 md:py-3 rounded-lg md:rounded-xl font-medium transition-all ${
-                        answers[currentQuestion._id]
+                        answers[currentFact._id]
                           ? "bg-gradient-to-r from-red-500 to-pink-500 text-white hover:opacity-90"
                           : "bg-white/10 text-white/50 cursor-not-allowed"
                       }`}
                     >
-                      {currentQuestionIndex < quiz.questions.length - 1
-                        ? "Next Question"
-                        : "Submit Quiz"}
+                      {currentFactIndex < game.facts.length - 1
+                        ? "Next Fact"
+                        : "Submit Answers"}
                       <ArrowRight size={20} />
                     </button>
                   </div>
@@ -402,16 +376,9 @@ const Quiz = () => {
             </motion.div>
           </AnimatePresence>
         </div>
-      ) : (
-        <div className="text-center space-y-4">
-          <h2 className="text-2xl font-bold text-white">
-            Please enter your name to start the quiz
-          </h2>
-          <p className="text-red-200">Your timer will begin after you join</p>
-        </div>
       )}
     </div>
   );
 };
 
-export default Quiz;
+export default FactCheckingGame;

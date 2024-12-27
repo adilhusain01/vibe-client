@@ -2,9 +2,9 @@ import { useState, useContext, useRef, useEffect } from "react";
 import { WalletContext } from "../context/WalletContext";
 import toast from "react-hot-toast";
 import axios from "../api/axios";
-import { ethers } from 'ethers';
-import ABI from '../utils/abi.json';
+import { ethers } from "ethers";
 import { QRCodeSVG } from "qrcode.react";
+import ABI from "../utils/abi.json";
 import {
   Dialog,
   DialogContent,
@@ -43,9 +43,8 @@ const PdfToQuiz = () => {
   const [closeDisabled, setCloseDisabled] = useState(true);
   const qrRef = useRef();
   const fileInputRef = useRef();
-  const [quizIds, setQuizIds] = useState([]);
-  const [quizQids, setQuizQids] = useState([]);
   const [quizCreated, setQuizCreated] = useState(false);
+  const baseUrl = import.meta.env.VITE_CLIENT_URI;
 
   const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS;
 
@@ -97,8 +96,15 @@ const PdfToQuiz = () => {
       return;
     }
 
-    const rewardPerScoreInWei = ethers.utils.parseUnits(rewardPerScore.toString(), 18);
-    const totalCost = rewardPerScoreInWei.mul(numParticipants).mul(questionCount).mul(ethers.BigNumber.from('110')).div(ethers.BigNumber.from('100'));
+    const rewardPerScoreInWei = ethers.utils.parseUnits(
+      rewardPerScore.toString(),
+      18
+    );
+    const totalCost = rewardPerScoreInWei
+      .mul(numParticipants)
+      .mul(questionCount)
+      .mul(ethers.BigNumber.from("110"))
+      .div(ethers.BigNumber.from("100"));
 
     try {
       const dataToSubmit = new FormData();
@@ -108,7 +114,7 @@ const PdfToQuiz = () => {
       dataToSubmit.append("pdf", pdfFile);
       dataToSubmit.append("questionCount", questionCount);
       dataToSubmit.append("rewardPerScore", rewardPerScore);
-      dataToSubmit.append("totalCost", totalCost);
+      dataToSubmit.append("totalCost", totalCost.toString());
       dataToSubmit.append("isPublic", false);
 
       setLoading(true);
@@ -124,47 +130,51 @@ const PdfToQuiz = () => {
       const quizId = response.data.quizId;
       setQuizId(quizId);
 
-      console.log(quizId)
+      console.log(quizId);
 
-      console.log(CONTRACT_ADDRESS)
+      console.log(CONTRACT_ADDRESS);
 
-      if (typeof window.ethereum !== 'undefined') {
+      if (typeof window.ethereum !== "undefined") {
         // Create a provider and signer
         const provider = new ethers.providers.Web3Provider(window.ethereum);
         const signer = provider.getSigner();
-  
+
         // Initialize the contract with ABI
         const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI.abi, signer);
-  
+
         // Convert totalCost to wei (smallest unit of Ether)
         const budget = ethers.BigNumber.from(totalCost.toString());
 
         const tx = await contract.createGame({ value: budget });
 
         const receipt = await tx.wait();
-        const gameId = receipt.events.find(event => event.event === "GameCreated").args.gameId; // store this id
+        const gameId = receipt.events.find(
+          (event) => event.event === "GameCreated"
+        ).args.gameId; // store this id
+
+        // Pushing game ID to backend
         console.log("New Game ID:", gameId.toString());
+        await axios.put(`/api/quiz/update/${quizId}`, { gameId });
 
+        toast.success("Quiz successfully created.");
+        loadAllQuizzes();
 
-      toast.success("Quiz successfully created.");
-      loadAllQuizzes();
+        setFormData({
+          creatorName: "",
+          numParticipants: "",
+          questionCount: "",
+          rewardPerScore: "",
+        });
+        setPdfFile(null);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = "";
+        }
 
-      setFormData({
-        creatorName: "",
-        numParticipants: "",
-        questionCount: "",
-        rewardPerScore: "",
-      });
-      setPdfFile(null);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
+        setLoading(false);
+        setOpen(true);
+      } else {
+        toast.error("MetaMask not Found. Please install MetaMask");
       }
-
-      setLoading(false);
-      setOpen(true);
-    } else {
-      toast.error("MetaMask not Found. Please install MetaMask")
-    }
     } catch (error) {
       console.error(
         error.response?.data?.message ||
@@ -217,31 +227,74 @@ const PdfToQuiz = () => {
   const handleStopQuiz = async () => {
     setStartDisabled(true);
     try {
-      await axios.put(`/api/quiz/update/${quizId}`, {
+      // Update quiz status via API
+      const response = await axios.put(`/api/quiz/update/${quizId}`, {
         isPublic: false,
         isFinished: true,
       });
+
+      console.log(response.data);
+
+      // Extract data from API response
+      const { gameId, participants } = response.data;
+      let scores = response.data.scores;
+
+      // Validate API response data
+      if (
+        !gameId ||
+        !participants ||
+        !scores ||
+        participants.length !== scores.length
+      ) {
+        toast.error("Invalid data received from the server");
+        setStartDisabled(false);
+        return;
+      }
+
       setIsPublic(false);
       setCloseDisabled(false);
 
-      toast.success("Quiz has ended");
-      setOpen(false);
-      setStartDisabled(false);
-      setIsPublic(false);
-      setCloseDisabled(true);
-      setQuizCreated(false);
+      if (typeof window.ethereum !== "undefined") {
+        try {
+          // Create a provider and signer
+          const provider = new ethers.providers.Web3Provider(window.ethereum);
+          const signer = provider.getSigner();
+
+          // Initialize the contract
+          const contract = new ethers.Contract(
+            CONTRACT_ADDRESS,
+            ABI.abi,
+            signer
+          );
+
+          // Convert scores to rewards in Wei
+          scores = scores.map((score) => score / 1000000000000000000);
+          const rewards = scores.map((score) =>
+            ethers.utils.parseEther(score.toString())
+          );
+
+          // Call the smart contract's endGame function
+          const tx = await contract.endGame(gameId, participants, rewards);
+          await tx.wait(); // Wait for the transaction to be mined
+
+          toast.success("Game has ended successfully");
+          setOpen(false);
+          setStartDisabled(false);
+          setIsPublic(false);
+          setCloseDisabled(true);
+          setQuizCreated(false);
+        } catch (error) {
+          console.error("Error ending the game:", error);
+          toast.error("An error occurred while ending the game");
+        }
+      } else {
+        toast.error("MetaMask not found. Please install MetaMask.");
+      }
     } catch (error) {
       toast.error("Failed to end the quiz");
-      console.log(error);
-    }
-  };
-
-  const loadAllQuizzes = async () => {
-    try {
-      toast.success("Quizzes loaded successfully");
-    } catch (error) {
       console.error(error);
-      toast.error("Failed to load quizzes");
+    } finally {
+      setStartDisabled(false);
     }
   };
 
@@ -261,8 +314,6 @@ const PdfToQuiz = () => {
       return () => clearInterval(interval);
     }
   }, [quizId, quizCreated]);
-
-  const baseUrl = import.meta.env.VITE_CLIENT_URI;
 
   return (
     <div
