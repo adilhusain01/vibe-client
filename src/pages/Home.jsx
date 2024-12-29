@@ -36,7 +36,7 @@ const Home = () => {
               </div>
             </Link>
 
-            <Link
+            {/* <Link
               to="/typing"
               className="group bg-white/10 backdrop-blur-lg rounded-xl p-10 border border-white/20 hover:bg-white/20 transition-all"
             >
@@ -46,9 +46,9 @@ const Home = () => {
                 </div>
                 <span className="text-lg font-semibold text-white">Typing</span>
               </div>
-            </Link>
+            </Link> */}
 
-            <Link
+            {/* <Link
               to="/memoryChallenge"
               className="group bg-white/10 backdrop-blur-lg rounded-xl p-10 border border-white/20 hover:bg-white/20 transition-all"
             >
@@ -58,7 +58,7 @@ const Home = () => {
                 </div>
                 <span className="text-lg font-semibold text-white">Memory</span>
               </div>
-            </Link>
+            </Link> */}
 
             <Link
               to="/fact-check"
