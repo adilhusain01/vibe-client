@@ -220,40 +220,51 @@ const PromptToQuiz = () => {
         isPublic: false,
         isFinished: true,
       });
-  
+
       console.log(response.data);
-  
+
       // Extract data from API response
       const { gameId, participants } = response.data;
-      let scores = response.data.scores;
-  
+      let rewards = response.data.rewards;
+
       // Validate API response data
-      if (!gameId || !participants || !scores || participants.length !== scores.length) {
+      if (
+        !gameId ||
+        !participants ||
+        !rewards ||
+        participants.length !== rewards.length
+      ) {
         toast.error("Invalid data received from the server");
         setStartDisabled(false);
         return;
       }
-  
+
       setIsPublic(false);
       setCloseDisabled(false);
-  
-      if (typeof window.ethereum !== 'undefined') {
+
+      if (typeof window.ethereum !== "undefined") {
         try {
           // Create a provider and signer
           const provider = new ethers.providers.Web3Provider(window.ethereum);
           const signer = provider.getSigner();
-  
+
           // Initialize the contract
-          const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI.abi, signer);
-  
-          // Convert scores to rewards in Wei
-          scores =  scores.map(score => score/1000000000000000000)
-          const rewards = scores.map(score => ethers.utils.parseEther(score.toString()));
-  
+          const contract = new ethers.Contract(
+            CONTRACT_ADDRESS,
+            ABI.abi,
+            signer
+          );
+
+          // Convert rewards in Wei
+          rewards = rewards.map((reward) => reward / 1000000000000000000);
+          rewards = rewards.map((reward) =>
+            ethers.utils.parseEther(reward.toString())
+          );
+
           // Call the smart contract's endGame function
           const tx = await contract.endGame(gameId, participants, rewards);
           await tx.wait(); // Wait for the transaction to be mined
-  
+
           toast.success("Game has ended successfully");
           setOpen(false);
           setStartDisabled(false);
