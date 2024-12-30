@@ -331,14 +331,14 @@ const LeaderBoards = () => {
                     </span>
                   </div>
                 </div>
-                <button
+                {/* <button
                   className="text-pink-400 font-bold"
                   onClick={() =>
                     setSelectedNFT(nftData[participant.walletAddress])
                   }
                 >
                   View NFT
-                </button>
+                </button> */}
                 <span className="text-pink-400 font-bold">
                   {participant.score}
                 </span>
