@@ -57,7 +57,7 @@ const WalletProvider = ({ children }) => {
       try {
         await window.ethereum.request({
           method: 'wallet_switchEthereumChain',
-          params: [{ chainId: '0xba9304' }], 
+          params: [{ chainId: '0xba93' }], 
         });
 
         const accounts = await window.ethereum.request({ method: 'eth_accounts' });
@@ -76,15 +76,15 @@ const WalletProvider = ({ children }) => {
               method: 'wallet_addEthereumChain',
               params: [
                 {
-                  chainId: '0xba9304',
-                  chainName: 'NeoX-Testnet',
-                  rpcUrls: ['https://neoxt4seed1.ngd.network'], 
+                  chainId: '0xba93',
+                  chainName: 'NeoX',
+                  rpcUrls: ['https://mainnet-1.rpc.banelabs.org'], 
                   nativeCurrency: {
                     name: 'GAS',
                     symbol: 'GAS',
                     decimals: 18,
                   },
-                  blockExplorerUrls: ['https://xt4scan.ngd.network/'],
+                  blockExplorerUrls: ['https://xexplorer.neo.org'],
                 },
               ],
             });
