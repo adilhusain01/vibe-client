@@ -221,7 +221,7 @@ const PromptToQuiz = () => {
         isFinished: true,
       });
 
-      console.log(response.data);
+      // console.log(response.data);
 
       // Extract data from API response
       const { gameId, participants } = response.data;
