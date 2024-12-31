@@ -2,6 +2,7 @@ import { useState, useContext, useRef, useEffect } from "react";
 import { WalletContext } from "../context/WalletContext";
 import toast from "react-hot-toast";
 import axios from "../api/axios";
+import { ethers } from "ethers";
 import { QRCodeSVG } from "qrcode.react";
 import {
   Dialog,
@@ -32,10 +33,10 @@ const URLToQuiz = () => {
   const [startDisabled, setStartDisabled] = useState(false);
   const [closeDisabled, setCloseDisabled] = useState(true);
   const qrRef = useRef();
-  const [quizIds, setQuizIds] = useState([]);
-  const [quizQids, setQuizQids] = useState([]);
-  const baseUrl = import.meta.env.VITE_CLIENT_URI;
   const [quizCreated, setQuizCreated] = useState(false);
+  const baseUrl = import.meta.env.VITE_CLIENT_URI;
+
+  const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS;
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -51,12 +52,10 @@ const URLToQuiz = () => {
     try {
       const parsedUrl = new URL(url);
 
-      // Check for valid protocol
       if (!["http:", "https:"].includes(parsedUrl.protocol)) {
         return { isValid: false, error: "URL must use HTTP or HTTPS protocol" };
       }
 
-      // Check for common file extensions that wouldn't work for quizzes
       const invalidExtensions = [
         ".pdf",
         ".jpg",
@@ -75,7 +74,6 @@ const URLToQuiz = () => {
         return { isValid: false, error: "Direct file links are not supported" };
       }
 
-      // Validate URL accessibility and content type
       try {
         setLoading(true);
         const response = await axios.post("/api/validate-url", {
@@ -142,14 +140,21 @@ const URLToQuiz = () => {
       return;
     }
 
-    // Validate URL format
     const urlValidation = await validateWebsiteUrl(websiteUrl);
     if (!urlValidation.isValid) {
       toast.error(urlValidation.error);
       return;
     }
 
-    const totalCost = rewardPerScore * numParticipants * questionCount * 1.1;
+    const rewardPerScoreInWei = ethers.utils.parseUnits(
+      rewardPerScore.toString(),
+      18
+    );
+    const totalCost = rewardPerScoreInWei
+      .mul(numParticipants)
+      .mul(questionCount)
+      .mul(ethers.BigNumber.from("110"))
+      .div(ethers.BigNumber.from("100"));
 
     try {
       const dataToSubmit = {
@@ -157,10 +162,9 @@ const URLToQuiz = () => {
         websiteUrl,
         numParticipants,
         questionCount,
-        rewardPerScore,
+        rewardPerScore: rewardPerScoreInWei.toString(),
         creatorWallet: walletAddress,
-        totalCost,
-        isPublic: false,
+        totalCost: totalCost.toString(),
       };
 
       setLoading(true);
@@ -176,19 +180,40 @@ const URLToQuiz = () => {
       const quizId = response.data.quizId;
       setQuizId(quizId);
 
-      toast.success("Quiz successfully created");
-      loadAllQuizzes();
+      console.log(quizId);
 
-      setFormData({
-        creatorName: "",
-        websiteUrl: "",
-        numParticipants: "",
-        questionCount: "",
-        rewardPerScore: "",
-      });
+      console.log(CONTRACT_ADDRESS);
 
-      setLoading(false);
-      setOpen(true);
+      if (typeof window.ethereum !== "undefined") {
+        const provider = new ethers.providers.Web3Provider(window.ethereum);
+        const signer = provider.getSigner();
+        const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI.abi, signer);
+        const budget = ethers.BigNumber.from(totalCost.toString());
+
+        const tx = await contract.createGame({ value: budget });
+
+        const receipt = await tx.wait();
+        const gameId = receipt.events.find(
+          (event) => event.event === "GameCreated"
+        ).args.gameId;
+
+        console.log("New Game ID:", gameId.toString());
+        await axios.put(`/api/quiz/update/${quizId}`, { gameId });
+
+        toast.success("Quiz successfully created.");
+        setFormData({
+          creatorName: "",
+          websiteUrl: "",
+          numParticipants: "",
+          questionCount: "",
+          rewardPerScore: "",
+        });
+
+        setLoading(false);
+        setOpen(true);
+      } else {
+        toast.error("MetaMask not Found. Please install MetaMask");
+      }
     } catch (error) {
       console.error(
         error.response?.data?.message ||
@@ -241,31 +266,66 @@ const URLToQuiz = () => {
   const handleStopQuiz = async () => {
     setStartDisabled(true);
     try {
-      await axios.put(`/api/quiz/update/${quizId}`, {
+      const response = await axios.put(`/api/quiz/update/${quizId}`, {
         isPublic: false,
         isFinished: true,
       });
+
+      console.log(response.data);
+
+      const { gameId, participants } = response.data;
+      let scores = response.data.scores;
+
+      if (
+        !gameId ||
+        !participants ||
+        !scores ||
+        participants.length !== scores.length
+      ) {
+        toast.error("Invalid data received from the server");
+        setStartDisabled(false);
+        return;
+      }
+
       setIsPublic(false);
       setCloseDisabled(false);
 
-      toast.success("Quiz has ended");
-      setOpen(false);
-      setStartDisabled(false);
-      setIsPublic(false);
-      setCloseDisabled(true);
-      setQuizCreated(false);
+      if (typeof window.ethereum !== "undefined") {
+        try {
+          const provider = new ethers.providers.Web3Provider(window.ethereum);
+          const signer = provider.getSigner();
+          const contract = new ethers.Contract(
+            CONTRACT_ADDRESS,
+            ABI.abi,
+            signer
+          );
+
+          scores = scores.map((score) => score / 1000000000000000000);
+          const rewards = scores.map((score) =>
+            ethers.utils.parseEther(score.toString())
+          );
+
+          const tx = await contract.endGame(gameId, participants, rewards);
+          await tx.wait();
+
+          toast.success("Game has ended successfully");
+          setOpen(false);
+          setStartDisabled(false);
+          setIsPublic(false);
+          setCloseDisabled(true);
+          setQuizCreated(false);
+        } catch (error) {
+          console.error("Error ending the game:", error);
+          toast.error("An error occurred while ending the game");
+        }
+      } else {
+        toast.error("MetaMask not found. Please install MetaMask.");
+      }
     } catch (error) {
       toast.error("Failed to end the quiz");
-      console.log(error);
-    }
-  };
-
-  const loadAllQuizzes = async () => {
-    try {
-      toast.success("Quizzes loaded successfully");
-    } catch (error) {
-      toast.error("Failed to load quizzes");
       console.error(error);
+    } finally {
+      setStartDisabled(false);
     }
   };
 
@@ -367,7 +427,7 @@ const URLToQuiz = () => {
                     onChange={handleChange}
                     className="w-full px-4 py-2 md:py-3 bg-white/10 border border-white/20 rounded-md md:rounded-xl text-white placeholder-red-200 focus:outline-none focus:ring-2 focus:ring-red-400"
                     placeholder="Reward per score"
-                    min="1"
+                    min="0.001"
                     required
                   />
                 </div>

@@ -255,6 +255,8 @@ const PromptToQuiz = () => {
             signer
           );
 
+          console.log(rewards);
+
           // Convert rewards in Wei
           rewards = rewards.map((reward) => reward / 1000000000000000000);
           rewards = rewards.map((reward) =>
