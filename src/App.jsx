@@ -15,33 +15,42 @@ const MemoryChallenge = lazy(() => import("./pages/MemoryChallenge"));
 const QuizOptions = lazy(() => import("./pages/QuizOptions"));
 const BrokenLink = lazy(() => import("./pages/BrokenLink"));
 const ServerError = lazy(() => import("./pages/ServerError"));
+const FactCheck = lazy(() => import("./pages/FactCheck"));
 const FactCheckingGame = lazy(() => import("./pages/FactCheckingGame"));
+const FactCheckLeaderboards = lazy(() =>
+import("./pages/FactCheckLeaderboards")
+);
 import LoadingSpinner from "./components/LoadingSpinner";
 
 const App = () => {
   return (
     <WalletProvider>
-      <Router>
-        <Suspense fallback={<LoadingSpinner />}>
-          <Routes>
-            <Route element={<Layout />}>
-              <Route path="/" element={<Home />} />
-              <Route path="/pdfToQuiz" element={<PdfToQuiz />} />
-              <Route path="/promptToQuiz" element={<PromptToQuiz />} />
-              <Route path="/urlToQuiz" element={<URLToQuiz />} />
-              <Route path="/videoToQuiz" element={<VideoToQuiz />} />
-              <Route path="/quiz/:id" element={<Quiz />} />
-              <Route path="/leaderboards/:id" element={<LeaderBoards />} />
-              <Route path="/typing" element={<Typing />} />
-              <Route path="/memoryChallenge" element={<MemoryChallenge />} />
-              <Route path="/fact-check" element={<FactCheckingGame />} />
-              <Route path="/quiz-options" element={<QuizOptions />} />
-            </Route>
-            <Route path="/500" element={<ServerError />} />
-            <Route path="*" element={<BrokenLink />} />
-          </Routes>
-        </Suspense>
-      </Router>
+    <Router>
+    <Suspense fallback={<LoadingSpinner />}>
+    <Routes>
+    <Route element={<Layout />}>
+    <Route path="/" element={<Home />} />
+    <Route path="/pdfToQuiz" element={<PdfToQuiz />} />
+    <Route path="/promptToQuiz" element={<PromptToQuiz />} />
+    <Route path="/urlToQuiz" element={<URLToQuiz />} />
+    <Route path="/videoToQuiz" element={<VideoToQuiz />} />
+    <Route path="/quiz/:id" element={<Quiz />} />
+    <Route path="/leaderboards/:id" element={<LeaderBoards />} />
+    <Route
+    path="/fact-check-leaderboards/:id"
+    element={<FactCheckLeaderboards />}
+    />
+    <Route path="/typing" element={<Typing />} />
+    <Route path="/memoryChallenge" element={<MemoryChallenge />} />
+    <Route path="/fact-check" element={<FactCheckingGame />} />
+    <Route path="/fact-check/:id" element={<FactCheck />} />
+    <Route path="/quiz-options" element={<QuizOptions />} />
+    </Route>
+    <Route path="/500" element={<ServerError />} />
+    <Route path="*" element={<BrokenLink />} />
+    </Routes>
+    </Suspense>
+    </Router>
     </WalletProvider>
   );
 };
