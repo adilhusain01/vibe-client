@@ -57,7 +57,7 @@ const WalletProvider = ({ children }) => {
       try {
         await window.ethereum.request({
           method: 'wallet_switchEthereumChain',
-          params: [{ chainId: '0xba93' }], 
+          params: [{ chainId: '0x138b' }], 
         });
 
         const accounts = await window.ethereum.request({ method: 'eth_accounts' });
@@ -76,15 +76,15 @@ const WalletProvider = ({ children }) => {
               method: 'wallet_addEthereumChain',
               params: [
                 {
-                  chainId: '0xba93',
-                  chainName: 'NeoX',
-                  rpcUrls: ['https://mainnet-1.rpc.banelabs.org'], 
+                  chainId: '0x138b',
+                  chainName: 'Mantle-Sepolia',
+                  rpcUrls: ['https://rpc.sepolia.mantle.xyz'], 
                   nativeCurrency: {
-                    name: 'GAS',
-                    symbol: 'GAS',
+                    name: 'MNT',
+                    symbol: 'MNT',
                     decimals: 18,
                   },
-                  blockExplorerUrls: ['https://xexplorer.neo.org'],
+                  blockExplorerUrls: ['https://sepolia.mantlescan.xyz'],
                 },
               ],
             });
