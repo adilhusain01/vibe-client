@@ -135,14 +135,9 @@ const PdfToQuiz = () => {
       console.log(CONTRACT_ADDRESS);
 
       if (typeof window.ethereum !== "undefined") {
-        // Create a provider and signer
         const provider = new ethers.providers.Web3Provider(window.ethereum);
         const signer = provider.getSigner();
-
-        // Initialize the contract with ABI
         const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI.abi, signer);
-
-        // Convert totalCost to wei (smallest unit of Ether)
         const budget = ethers.BigNumber.from(totalCost.toString());
 
         const tx = await contract.createGame({ value: budget });
@@ -150,15 +145,12 @@ const PdfToQuiz = () => {
         const receipt = await tx.wait();
         const gameId = receipt.events.find(
           (event) => event.event === "GameCreated"
-        ).args.gameId; // store this id
+        ).args.gameId;
 
-        // Pushing game ID to backend
         console.log("New Game ID:", gameId.toString());
         await axios.put(`/api/quiz/update/${quizId}`, { gameId });
 
         toast.success("Quiz successfully created.");
-        loadAllQuizzes();
-
         setFormData({
           creatorName: "",
           numParticipants: "",
@@ -227,7 +219,6 @@ const PdfToQuiz = () => {
   const handleStopQuiz = async () => {
     setStartDisabled(true);
     try {
-      // Update quiz status via API
       const response = await axios.put(`/api/quiz/update/${quizId}`, {
         isPublic: false,
         isFinished: true,
@@ -235,11 +226,9 @@ const PdfToQuiz = () => {
 
       console.log(response.data);
 
-      // Extract data from API response
       const { gameId, participants } = response.data;
       let scores = response.data.scores;
 
-      // Validate API response data
       if (
         !gameId ||
         !participants ||
@@ -256,26 +245,21 @@ const PdfToQuiz = () => {
 
       if (typeof window.ethereum !== "undefined") {
         try {
-          // Create a provider and signer
           const provider = new ethers.providers.Web3Provider(window.ethereum);
           const signer = provider.getSigner();
-
-          // Initialize the contract
           const contract = new ethers.Contract(
             CONTRACT_ADDRESS,
             ABI.abi,
             signer
           );
 
-          // Convert scores to rewards in Wei
           scores = scores.map((score) => score / 1000000000000000000);
           const rewards = scores.map((score) =>
             ethers.utils.parseEther(score.toString())
           );
 
-          // Call the smart contract's endGame function
           const tx = await contract.endGame(gameId, participants, rewards);
-          await tx.wait(); // Wait for the transaction to be mined
+          await tx.wait();
 
           toast.success("Game has ended successfully");
           setOpen(false);
@@ -334,7 +318,6 @@ const PdfToQuiz = () => {
         <form onSubmit={handleSubmit} className="space-y-6 text-sm md:text-md">
           <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 border border-white/20 shadow-xl">
             <div className="space-y-6">
-              {/* Creator Name Input */}
               <div className="space-y-2">
                 <label className="text-white text-sm font-medium">
                   Creator Name
@@ -350,7 +333,6 @@ const PdfToQuiz = () => {
                 />
               </div>
 
-              {/* Grid for numeric inputs */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <label className="text-white text-sm font-medium flex items-center gap-2">
@@ -405,7 +387,6 @@ const PdfToQuiz = () => {
                 </div>
               </div>
 
-              {/* PDF Upload Section */}
               <div className="space-y-2">
                 <label className="text-white text-sm font-medium flex items-center gap-2">
                   <FileText size={16} />
@@ -431,7 +412,6 @@ const PdfToQuiz = () => {
                 </div>
               </div>
 
-              {/* Submit Button */}
               <button
                 type="submit"
                 disabled={loading}
@@ -450,7 +430,6 @@ const PdfToQuiz = () => {
           </div>
         </form>
 
-        {/* Dialog */}
         <Dialog
           open={open}
           onClose={(_, reason) =>
@@ -468,7 +447,6 @@ const PdfToQuiz = () => {
         >
           <DialogContent style={{ backgroundColor: "#7f1d1d" }}>
             <div className="grid md:grid-cols-2 gap-8">
-              {/* QR Code Section */}
               <div className="flex flex-col items-center gap-6" ref={qrRef}>
                 <h2 className="text-xl md:text-2xl font-bold text-white">
                   Quiz ID: <span className="text-red-400">#{quizId}</span>
@@ -501,7 +479,6 @@ const PdfToQuiz = () => {
                 />
               </div>
 
-              {/* Participants Section */}
               <div className="space-y-4">
                 <h2 className="text-xl md:text-2xl font-bold text-white text-center">
                   Participants
