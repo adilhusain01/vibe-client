@@ -1,7 +1,6 @@
 const networks = {
     "0x1": "Mainnet",
-    "0xaa36a7": "Sepolia",
-    "0x138b": "Mantle-Sepolia",
+    "0x4f5e0c": "Electroneum",
 }
   
 export { networks };

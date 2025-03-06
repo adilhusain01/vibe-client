@@ -57,7 +57,7 @@ const WalletProvider = ({ children }) => {
       try {
         await window.ethereum.request({
           method: 'wallet_switchEthereumChain',
-          params: [{ chainId: '0x138b' }], 
+          params: [{ chainId: '0x4f5e0c' }], 
         });
 
         const accounts = await window.ethereum.request({ method: 'eth_accounts' });
@@ -76,15 +76,15 @@ const WalletProvider = ({ children }) => {
               method: 'wallet_addEthereumChain',
               params: [
                 {
-                  chainId: '0x138b',
-                  chainName: 'Mantle-Sepolia',
-                  rpcUrls: ['https://rpc.sepolia.mantle.xyz'], 
+                  chainId: '0x4f5e0c',
+                  chainName: 'Electorneum',
+                  rpcUrls: ['https://rpc.ankr.com/electroneum_testnet'], 
                   nativeCurrency: {
-                    name: 'MNT',
-                    symbol: 'MNT',
+                    name: 'ENT',
+                    symbol: 'ENT',
                     decimals: 18,
                   },
-                  blockExplorerUrls: ['https://sepolia.mantlescan.xyz'],
+                  blockExplorerUrls: ['https://testnet-blockexplorer.electroneum.com/'],
                 },
               ],
             });
