@@ -80,8 +80,8 @@ const WalletProvider = ({ children }) => {
                   chainName: 'Electorneum',
                   rpcUrls: ['https://rpc.ankr.com/electroneum_testnet'], 
                   nativeCurrency: {
-                    name: 'ENT',
-                    symbol: 'ENT',
+                    name: 'ETNT',
+                    symbol: 'ETNT',
                     decimals: 18,
                   },
                   blockExplorerUrls: ['https://testnet-blockexplorer.electroneum.com/'],
